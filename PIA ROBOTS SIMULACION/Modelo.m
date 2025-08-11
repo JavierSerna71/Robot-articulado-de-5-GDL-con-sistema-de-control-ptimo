@@ -1,116 +1,116 @@
-% Clear all variables
-clear all
+% Limpiar workspace
+clear all;
+clc;
+pkg load symbolic;  % Cargar paquete simbólico
 
-% Define inputs
-d0 = 12.0;  % Base height (meters)
-d1 = 6.0;   % Length of the first arm segment (meters)
-d2 = 4.0;   % Length of the second arm segment (meters)
-d3 = 2.0;   % Length of the third arm segment (meters)
-P = [5; 5; 5; -pi/2];  % Target end-effector position and orientation [x; y; z; alpha]
+% ========== CONFIGURACIÓN NUMÉRICA ==========
+% Longitudes físicas (metros)
+d0 = 12.0;  % Altura base
+d1 = 6.0;   % Brazo 1
+d2 = 4.0;   % Brazo 2
+d3 = 2.0;   % Brazo 3
 
+% Posición/orientación deseada [x; y; z; alpha] (alpha en radianes)
+P = [5; 5; 5; -pi/2];
 
-% Define symbolic variables
-syms l0 l1 l2 l3 tht1 tht2 tht3 tht4 real
+% ========== CINEMÁTICA INVERSA (NUMÉRICA) ==========
+% 1. Calcular theta1 (rotación base)
+q1 = atan2(P(2), P(1));
 
-% Denavit-Hartenberg transformation matrices for each joint
-T01 = DHmethode(0, 0, l0, tht1);              % First joint
-T12 = DHmethode(0, sym(pi/2), 0, tht2);       % Second joint
-T23 = DHmethode(l1, 0, 0, tht3);              % Third joint
-T34 = DHmethode(l2, 0, 0, tht4);              % Fourth joint
-T45 = DHmethode(l3, 0, 0, 0);                 % End effector
+% 2. Calcular theta2, theta3, theta4
+Ex = P(1) / cos(q1);
+Ey = P(2);
+Ez = P(3) - d0;
 
-% Compute the overall transformation matrix
-T05 = T01 * T12 * T23 * T34 * T45;             
-T05 = vpa(T05, 2);                             % Simplify and display transformation matrix
+% Ajustar por orientación (alpha)
+Ex = Ex - d3 * cos(P(4));
+Ez = Ez - d3 * sin(P(4));
 
-% Inverse kinematics
-x = P(1);
-y = P(2);
-z = P(3);
-alpha = P(4);
-
-% Compute joint angles using inverse kinematics
-q1 = atan2(y, x);
-Ex = x / cos(q1);
-Ey = y;
-Ez = z - d0;
-Ex = Ex - d3 * cos(alpha);
-Ez = Ez - d3 * sin(alpha);
-
-C = ((Ex^2) + (Ez^2) - d1^2 - d2^2) / (2 * d1 * d2);
+% Soluciones para theta3
+C = (Ex^2 + Ez^2 - d1^2 - d2^2) / (2 * d1 * d2);
 q31 = acos(C);
 q32 = -acos(C);
 
+% Soluciones para theta2
 q21 = atan2(Ez, Ex) - atan2(d2 * sin(q31), d1 + d2 * cos(q31));
-q41 = alpha - q21 - q31;
-
 q22 = atan2(Ez, Ex) - atan2(d2 * sin(q32), d1 + d2 * cos(q32));
-q42 = alpha - q22 - q32;
 
+% Soluciones para theta4
+q41 = P(4) - q21 - q31;
+q42 = P(4) - q22 - q32;
+
+% Dos configuraciones posibles
 Q1 = [q1, q21, q31, q41];
 Q2 = [q1, q22, q32, q42];
 
-% Define the lengths of the arm segments (in meters)
-L0 = d0;
-L1 = d1;
-L2 = d2;
-L3 = d3;
+% Usamos Q1 para la visualización
+tht1 = Q2(1);
+tht2 = Q2(2);
+tht3 = Q2(3);
+tht4 = Q2(4);
 
-% Define the joint angles (in radians)
-tht1 = q1;  % Base rotation
-tht2 = q21;
-tht3 = q31;
-tht4 = q41;
+% ========== CÁLCULO DE POSICIONES (NUMÉRICO) ==========
+% Coordenadas de articulaciones
+x0 = 0; y0 = 0; z0 = 0;
+x1 = 0; y1 = 0; z1 = d0;
 
-% Calculate the positions of the end effector and joints
-x1 = 0;
-y1 = 0;
-z1 = L0;
+x2 = d1 * cos(tht1) * cos(tht2);
+y2 = d1 * cos(tht2) * sin(tht1);
+z2 = d0 + d1 * sin(tht2);
 
-x2 = L1 * cos(tht1) * cos(tht2);
-y2 = L1 * cos(tht2) * sin(tht1);
-z2 = L0 + L1 * sin(tht2);
+x3 = x2 + d2 * (cos(tht1)*cos(tht2+tht3));
+y3 = y2 + d2 * (sin(tht1)*cos(tht2+tht3));
+z3 = z2 + d2 * sin(tht2+tht3);
 
-x3 = L1 * cos(tht1) * cos(tht2) - L2 * (cos(tht1) * sin(tht2) * sin(tht3) - cos(tht1) * cos(tht2) * cos(tht3));
-y3 = L1 * cos(tht2) * sin(tht1) - L2 * (sin(tht1) * sin(tht2) * sin(tht3) - cos(tht2) * cos(tht3) * sin(tht1));
-z3 = L0 + L2 * (cos(tht2) * sin(tht3) + cos(tht3) * sin(tht2)) + L1 * sin(tht2);
+x4 = x3 + d3 * (cos(tht1)*cos(tht2+tht3+tht4));
+y4 = y3 + d3 * (sin(tht1)*cos(tht2+tht3+tht4));
+z4 = z3 + d3 * sin(tht2+tht3+tht4);
 
-x4 = L1 * cos(tht1) * cos(tht2) - L3 * (sin(tht4) * (cos(tht1) * cos(tht2) * sin(tht3) + cos(tht1) * cos(tht3) * sin(tht2)) + cos(tht4) * (cos(tht1) * sin(tht2) * sin(tht3) - cos(tht1) * cos(tht2) * cos(tht3))) - L2 * (cos(tht1) * sin(tht2) * sin(tht3) - cos(tht1) * cos(tht2) * cos(tht3));
-y4 = L1 * cos(tht2) * sin(tht1) - L3 * (sin(tht4) * (cos(tht2) * sin(tht1) * sin(tht3) + cos(tht3) * sin(tht1) * sin(tht2)) + cos(tht4) * (sin(tht1) * sin(tht2) * sin(tht3) - cos(tht2) * cos(tht3) * sin(tht1))) - L2 * (sin(tht1) * sin(tht2) * sin(tht3) - cos(tht2) * cos(tht3) * sin(tht1));
-z4 = L0 + L3 * (sin(tht4) * (cos(tht2) * cos(tht3) - sin(tht2) * sin(tht3)) + cos(tht4) * (cos(tht2) * sin(tht3) + cos(tht3) * sin(tht2))) + L2 * (cos(tht2) * sin(tht3) + cos(tht3) * sin(tht2)) + L1 * sin(tht2);
-
-% Define the coordinates of the arm
-x = [0, x1, x2, x3, x4];
-y = [0, y1, y2, y3, y4];
-z = [0, z1, z2, z3, z4];
-
-% Define the colors of each link
-colors = ['r', 'g', 'b', 'c'];
-
-% Plot the arm in 3D
+% ========== VISUALIZACIÓN 3D ==========
 fig = figure();
 ax = axes('Parent', fig);
+hold(ax, 'on');
 grid(ax, 'on');
-view(3);  % Set the view to 3D
+view(3);
+axis equal;
+
+% Límites del gráfico
 a = d1 + d2 + d3;
 b = d0 + d1 + d2 + d3;
 xlim([-a, a]);
 ylim([-a, a]);
 zlim([0, b]);
-xlabel('X');
-ylabel('Y');
-zlabel('Z');
+xlabel('X (m)');
+ylabel('Y (m)');
+zlabel('Z (m)');
+title('Robot 4DOF - Cinemática Inversa');
 
-% Draw the links of the arm
-for i = 1:length(x) - 1
-    line([x(i), x(i + 1)], [y(i), y(i + 1)], [z(i), z(i + 1)], 'Color', colors(i), 'LineWidth', 2);
-    hold on;
+% Dibujar eslabones
+links_x = [x0, x1, x2, x3, x4];
+links_y = [y0, y1, y2, y3, y4];
+links_z = [z0, z1, z2, z3, z4];
+
+colors = ['r', 'g', 'b', 'c'];
+for i = 1:4
+    plot3([links_x(i), links_x(i+1)], ...
+          [links_y(i), links_y(i+1)], ...
+          [links_z(i), links_z(i+1)], ...
+          'Color', colors(i), 'LineWidth', 3);
 end
 
-% Plot the joints
-scatter3(ax, x, y, z, 50, 'k', 'filled');
-hold on;
+% Dibujar articulaciones
+scatter3(links_x, links_y, links_z, 100, 'k', 'filled');
 
-% Plot the point
-scatter3(ax, x4, y4, 0, 'filled');
-hold on;
+% Punto final deseado
+scatter3(P(1), P(2), P(3), 150, 'm', 'pentagram', 'filled');
+legend('Brazo 1', 'Brazo 2', 'Brazo 3', 'Brazo 4', 'Articulaciones', 'Objetivo');
+
+% ========== FUNCIÓN DH (COMPATIBLE OCTAVE) ==========
+function T = DHmethode(a, alpha, d, theta)
+    % Matriz de transformación Denavit-Hartenberg
+    % Compatible con Octave (simbólico/numérico)
+    T = [cos(theta), -sin(theta)*cos(alpha),  sin(theta)*sin(alpha), a*cos(theta);
+         sin(theta),  cos(theta)*cos(alpha), -cos(theta)*sin(alpha), a*sin(theta);
+         0,          sin(alpha),             cos(alpha),            d;
+         0,          0,                      0,                     1];
+end
